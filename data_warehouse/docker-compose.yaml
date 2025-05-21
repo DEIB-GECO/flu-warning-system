@@ -1,0 +1,11 @@
+services:
+  frontend:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: datawarehouse_flu
+    container_name: datawarehouse_flu
+    ports:
+      - 60118:8501
+    environment:
+      - PYTHONUNBUFFERED=1
