@@ -1,0 +1,9 @@
+.gitignore
+.git/
+Dockerfile
+**/*.pyc
+**/*.pyo
+**/*.mo
+**/__pycache__/
+data/
+generated/

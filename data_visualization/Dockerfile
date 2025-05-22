@@ -5,9 +5,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y build-essential
 RUN pip install --upgrade pip
 
-COPY ./ /app/
+COPY ./requirements.txt /app/requirements.txt
 
 RUN pip install -r requirements.txt
+
+COPY ./ /app/
 
 EXPOSE 8501
 

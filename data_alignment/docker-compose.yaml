@@ -1,0 +1,10 @@
+services:
+  data_alignment:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: data_alignment_flu
+    container_name: data_alignment_flu
+    volumes:
+      - ./inputs:/app/inputs
+      - ./alignments:/app/alignments  

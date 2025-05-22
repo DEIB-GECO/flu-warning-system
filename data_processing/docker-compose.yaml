@@ -1,0 +1,14 @@
+services:
+  data_processing:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: data_processing_flu
+    container_name: data_processing_flu
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./alignments:/app/alignments
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./references:/app/references

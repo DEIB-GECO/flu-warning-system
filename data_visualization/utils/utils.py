@@ -229,15 +229,19 @@ def table_countries_and_continents(table: pd.DataFrame):
 
 @st.cache_resource
 def table_countries_and_states(table: pd.DataFrame):
-    return table.country_or_state.unique().tolist()
+    return table.country_or_state.sort_values().unique().tolist()
+
+@st.cache_resource
+def table_genotypes(table: pd.DataFrame):
+    return pd.Series(table["Genotype"].unique()).sort_values().tolist()
 
 class Table:
 
     @staticmethod
-    def filter(table: pd.DataFrame, sel_host_type: list = [], sel_country_or_state: list = [], sel_locations: list = [], date_range: DateRange = None):
+    def filter(table: pd.DataFrame, sel_host_type: list = [], sel_country_or_state: list = [], sel_locations: list = [], date_range: DateRange = None, sel_genotypes: list = []):
         mask = np.ones(table.shape[0], dtype=bool)  # incrementally add elements to the mask (AND between different filter categories, OR within values of the same filter)
         if sel_host_type:
-            mask = table.Host_Type.isin(sel_host_type)  # stands for mask = mask & ...
+            mask = table.Host_Type.isin(sel_host_type)  # stands for mask = mask & ...  but the ".isin" does the OR of the argument values 
         if sel_country_or_state:
             mask = mask & (table.country_or_state.isin(sel_country_or_state))
         if sel_locations:
@@ -247,4 +251,6 @@ class Table:
             mask = mask & location_mask
         if date_range:        
             mask = mask & (table.Collection_Date >= date_range.start.to_numpy()) & (table.Collection_Date < date_range.end.to_numpy())
+        if sel_genotypes: 
+            mask = mask & (table['Genotype'].isin(sel_genotypes))
         return table[mask]

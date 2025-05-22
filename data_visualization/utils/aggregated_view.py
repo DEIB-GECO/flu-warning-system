@@ -128,7 +128,7 @@ class XMLTableEditor:
 
 def compute_agg_view_df(date_range, input_sequences_table, 
                         db_engine, st_tab_name2db_table_name, combinations,
-                        sel_host_type=[], sel_locations=[], sel_country_or_state=[]):
+                        sel_host_type=[], sel_locations=[], sel_country_or_state=[], sel_genotypes=[]):
     _, test_ranges = DateRange.week_step_date_ranges_split_train_test_moving_window_v3(
         date_range,
         train_weeks=1,
@@ -138,7 +138,7 @@ def compute_agg_view_df(date_range, input_sequences_table,
     bins = [test_ranges[0][0]] + [d[1] for d in test_ranges]
 
     # count input sequences by time
-    filtered_input_sequences = Table.filter(input_sequences_table, sel_host_type, sel_country_or_state, sel_locations)
+    filtered_input_sequences = Table.filter(input_sequences_table, sel_host_type, sel_country_or_state, sel_locations, sel_genotypes=sel_genotypes)
     input_count_by_time = filtered_input_sequences.groupby(
         pd.cut(
             filtered_input_sequences.Collection_Date, bins, right=False, include_lowest=True
@@ -152,7 +152,7 @@ def compute_agg_view_df(date_range, input_sequences_table,
         if not st_tab_name.startswith("Window"):
             continue
         table = CachedDB.get_table_named_as(db_engine, table_name)
-        filtered_table = Table.filter(table, sel_host_type, sel_country_or_state, sel_locations)
+        filtered_table = Table.filter(table, sel_host_type, sel_country_or_state, sel_locations, sel_genotypes=sel_genotypes)
         warnings_count_by_time = filtered_table.groupby(
             pd.cut(filtered_table.Collection_Date, bins, right=False, include_lowest=True),
             observed=False,

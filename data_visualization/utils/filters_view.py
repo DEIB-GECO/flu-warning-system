@@ -32,3 +32,10 @@ def collection_date_slider(intial_range: tuple[datetime]):
     date_range.end = pd.Timestamp(sel_collection_date_range[1])
     return date_range
 
+def genotype_multiselect(unique_genotypes) -> list:
+    return st.multiselect(
+        label="Genotypes",
+        options=unique_genotypes,
+        help="Select one or more values to enable the filter",
+        placeholder="Select one or more values to enable the filter",
+    )

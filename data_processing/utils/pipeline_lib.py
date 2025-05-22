@@ -11,13 +11,19 @@ import matplotlib.pyplot as plt
 mpl.rcParams.update(mpl.rcParamsDefault)     # reset matplotlib style
 plt.style.use('fast')
 import requests
-from sktime.annotation.stray import STRAY
+from sktime.detection.stray import STRAY
 from sklearn.preprocessing import MinMaxScaler
-
-from utils.location import Geoapify, GeoKB
 from utils.genetic_code import GeneticCode
 from utils.data_cleaning import DataCleaning, DateRange
-from utils.pipeline import Step
+from job_orchestra import Step
+import shlex
+import subprocess
+from utils.data_exploration import Explorer
+from math import floor, ceil
+from utils.variant_calling import extract_annotated_seq_after_augur
+from tqdm import tqdm
+import miniFasta
+import os
 
 class BaseResultType(TypedDict, total=False):   
     # the following are sugegsted keys. Their presence is not mandatory.
@@ -79,18 +85,316 @@ class InputH5N1:
             }
 
 class Input:
-  
-    class AssignHostType(Step):
-        def run(input_data):
-            meta = input_data.output
+    class ReadMetadata(Step):
+        def __init__(self, *metadata_file_paths, verbose=False, **kwargs):
+            super().__init__(**kwargs)
+            self.verbose = verbose
+            self.metadata_file_paths = metadata_file_paths
+        def run(self):
+            meta = Explorer.read_meta(*self.metadata_file_paths, verbose=self.verbose)
+            return {
+                'output': meta,
+                'metadata_feature_names': list(meta.columns)
+            }
+
+    class ReadData(Step):
+        def __init__(self, *data_file_paths, verbose=False, **kwargs):
+            super().__init__(**kwargs)
+            self.verbose = verbose
+            self.data_file_paths = data_file_paths
+        def run(self):
+            data = Explorer.read_data(*self.data_file_paths, verbose=self.verbose)
+            return {
+                'output': data,
+                'data_feature_names': list(data.columns),
+                'metadata_feature_names': []
+            }
+    
+    class FilterSeqLen(Step):
+        def __init__(self, len_range: tuple, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.len_range = len_range
+        def run(self, data_input: ResultType):
+            return {
+                'output': data_input.output[data_input.output.seq_len.between(*self.len_range)].copy(),
+                'data_feature_names': data_input['data_feature_names'],
+                'metadata_feature_names': data_input['metadata_feature_names'] if 'metadata_feature_names' in data_input.keys() else ['']
+            }
+
+    class MetadataCleaning(Step):
+        def __init__(self, allow_incomplete_collection_dates, allow_null_submission_dates, *args, additional_mappings=None, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.allow_incomplete_collection_dates = allow_incomplete_collection_dates
+            self.allow_null_submission_dates = allow_null_submission_dates
+            self.additional_mappings=additional_mappings
+        def run(self, metadata):
+            meta = metadata.output.copy()
+            # collection date (may be incomplete or null)
+            if self.allow_incomplete_collection_dates:
+                meta.Collection_Date = pd.to_datetime(meta.Collection_Date, format='ISO8601')
+            else:
+                meta.Collection_Date =  pd.to_datetime(meta.Collection_Date, format="%Y-%m-%d", errors='coerce')
+                meta = meta[~pd.isna(meta.Collection_Date)]
+            # submission date is either completely specified or null
+            meta.Submission_Date =  pd.to_datetime(meta.Submission_Date, format="%Y-%m-%d")
+            if not self.allow_null_submission_dates:
+                meta = meta[~pd.isna(meta.Submission_Date)]
+            # host and host_type
             meta = DataCleaning.merge_fix_host_species(meta)
             meta = DataCleaning.assign_host_type(meta, additional_mappings=self.additional_mappings, raise_on_error=True)
             meta = meta[meta.Host_Type != "other"].copy()
+            # clade
+            meta.Clade = meta.Clade.replace({"unassigned": np.nan})
+            # flu-season
+            meta = DataCleaning.assign_flu_season(meta)
+            # genotype
+            if 'Genotype' in meta.columns:
+                meta['Genotype'] = meta['Genotype'].str.replace(" (<i style='font-size:11px'>GenoFLU</i>)", "", regex=False)
+                meta['Genotype'] = meta['Genotype'].str.replace("Not assigned", "Notassigned", regex=False)
+                meta['Genotype'] = meta['Genotype'].str.replace("\n", "", regex=False)
+                meta['Genotype'] = meta['Genotype'].replace({"Notassigned": np.nan})
+                meta['Genotype'] = meta['Genotype'].fillna(np.nan)
             return {
                 'output': meta, 
-                'data_feature_names': input_data.data_feature_names,
-                'metadata_feature_names': input_data.metadata_feature_names + ['Host_Type']
+                'metadata_feature_names': list(meta.columns),
+                'data_feature_names': []
             }
+        
+    class MetaDataMerge(Step):
+        def run(self, metadata_input, data_input):
+            meta = metadata_input.output
+            data = data_input.output   
+            # merge
+            md = pd.merge(meta, data, left_index=True, right_index=True, how="inner")
+            # remove duplicate indexes
+            md = DataCleaning.remove_duplicate_index(md, verbose=False)
+            return {
+                'output': md,
+                'data_feature_names': data_input['data_feature_names'],
+                'metadata_feature_names': metadata_input['metadata_feature_names']
+            }
+        
+    class FilterSegm(Step):
+        def __init__(self, segm_name, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.segm_name = segm_name
+        def run(self, input_data: ResultType):
+            return {
+                'output': input_data.output[input_data.output.segm == self.segm_name],
+                'metadata_feature_names': input_data.metadata_feature_names,
+                'data_feature_names': input_data.data_feature_names
+            }
+        
+    class SegmCleaning(Step):
+        def __init__(self, max_n_ratio: float, mode_length_perc_deviation: int, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.max_n_ratio = max_n_ratio
+            self.mode_length_perc_deviation = mode_length_perc_deviation
+
+        def run(self, md_input):
+            md = md_input.output
+            assert {'seq_len', 'n_ratio', 'sequence'}.issubset(md.columns), "Input data frame misses one or more required columns: 'segm', 'seq_len', 'sequence'"
+            # remove seqeunces with too many Ns
+            md = md[md.n_ratio <= self.max_n_ratio]
+            # remove sequences with wrong length
+            mode_length = md.seq_len.mode().item()
+            three_perc_deviation = mode_length * self.mode_length_perc_deviation / 100
+            allowed_length_range = (mode_length - floor(three_perc_deviation), mode_length + ceil(three_perc_deviation))
+            md = md[md.seq_len.between(*allowed_length_range)]
+            return {
+                'output': md, 
+                'data_feature_names':  md_input['data_feature_names'],
+                'metadata_feature_names': md_input['metadata_feature_names']
+            }
+        
+    class SegmAlignment(Step):
+        """
+        As bad sequences can influence the global output of augur, it's best to filter out bad sequences (high N% or weird lengths before doing the alignment)
+        """
+        def __init__(self, target_file_path, reference_file_path: str, nthreads: str|int = 'auto', preview=False,
+                    *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.target_file = target_file_path
+            self.reference_file = reference_file_path
+            self.nthreads = nthreads
+            # paths to store future alignments
+            self.aligned_file = self.target_file.replace(".fasta", "_aligned.fasta")
+            self.insertions_file = f"{self.aligned_file}.insertions.csv"
+            self.preview = preview
+
+        def run(self, md_input):
+            md = md_input.output
+            assert 'sequence' in list(md.columns), "Input data frame misses one or more required columns: 'segm', 'seq_len', 'sequence'"
+            # align
+            df2fasta(md, self.target_file)
+            curr_interpreter = sys.executable
+            command = f"{curr_interpreter} -m augur align --reference-sequence {self.reference_file} --sequences {self.target_file} --output {self.aligned_file} --nthreads {self.nthreads}"
+            if self.preview:
+                print("Will execute:", command)
+            else:
+                print("Running:", command)
+                # check augur is available
+                if importlib.util.find_spec('augur') is None:
+                    raise ModuleNotFoundError("augur is not available in the current interpreter. Install augur.")
+                try:
+                    completed_process = subprocess.run(shlex.split(command), check=True, capture_output=True, text=True)   # if completed_process.returncode != 0 raise subprocess.CalledProcessError
+                except subprocess.CalledProcessError as cpe:
+                    print(f"Error while invoking augur with command {command}")
+                    raise cpe
+                # alternative nethod to call augur
+                    # completed_process = subprocess.Popen(
+                    #     shlex.split(command), stdout=subprocess.PIPE
+                    # )
+                    # output, error = completed_process.communicate()
+            return {
+                'aligned_file': self.aligned_file,
+                'insertions_file': self.insertions_file
+            }
+
+    class SegmCDS(Step):
+        """
+        As bad sequences can influence the global output of augur, it's best to filter out bad sequences (high N% or weird lengths before doing the alignment)
+        """
+        def __init__(self, reference_file_path: str, annotation_range_1_based: tuple, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.reference_file = reference_file_path
+            a = annotation_range_1_based
+            self.annotation_range = (a[0]-1, a[1]) # convert to 0-based. The 0-based conversion of the right edge is -1 (because we change the numebring convention) + 1 (to transform the range from [] to [).
+
+        def run(self, md_input, segm_alignment):
+            md = md_input.output.copy()
+            aligned_file = segm_alignment.aligned_file
+            insertions_file = segm_alignment.insertions_file
+            changes_dict, annotated_seq_dict = extract_annotated_seq_after_augur(md, self.reference_file, aligned_file, insertions_file, self.annotation_range, verbose=False)
+            md["CDS"] = annotated_seq_dict
+            return {
+                'output': md, 
+                'data_feature_names':  md_input['data_feature_names'] + ['CDS'],
+                'metadata_feature_names': md_input['metadata_feature_names']
+            }
+    
+    class FilterValidCDS(Step):
+        def run(self, input_data: ResultType):
+            md = input_data.output
+            data_size = md.shape[0]
+            # consider only CDS divisible by 3
+            md = md.astype({'CDS': "str"})
+            md = md[md.CDS.apply(len) % 3 == 0]
+            filtered_data_size = md.shape[0]
+            print(f"Extracted valid CDS sequence for {filtered_data_size} sequences ({(filtered_data_size / data_size * 100):.2f} % of aligned sequences)")
+            return {
+                'output': md, 
+                'data_feature_names':  input_data['data_feature_names'],
+                'metadata_feature_names': input_data['metadata_feature_names']
+            }
+        
+    class AssertCDSLength(Step):
+        def __init__(self, reference_length: int, perc_deviation: int, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.reference_length = reference_length
+            self.perc_deviation = perc_deviation
+        def run(self, data_input: ResultType):
+            deviation = self.reference_length * self.perc_deviation / 100
+            min_length, max_length = self.reference_length - floor(deviation), self.reference_length + ceil(deviation)
+            if not data_input.output.CDS.str.len().between(min_length, max_length).all():
+                invalid_cds = data_input.output[~data_input.output.CDS.str.len().between(min_length, max_length)]
+                if "HA" in self.name_alias:
+                    print(f"Skipping {invalid_cds.shape[0]} sequence having CDS length != {self.perc_deviation}% of the reference CDS length: {invalid_cds.index.tolist()}")
+                    return {
+                        'output': data_input.output[data_input.output.CDS.str.len().between(min_length, max_length)],
+                        'data_feature_names': data_input.data_feature_names,
+                        'metadata_feature_names': data_input.metadata_feature_names
+                    }
+                else:
+                    raise AssertionError(f"{invalid_cds.shape[0]} sequences have CDS length != {self.perc_deviation}% of the reference CDS length: {invalid_cds.index.tolist()}")
+            return data_input
+        
+        # EXAMPLE USAGE
+        # S_input_meta = ReadMetadata(files)
+        # S_meta_cleaning = MetadataCleaning(depends_on=S_input_meta, allow_incomplete_collection_dates=False, allow_null_submission_dates=True)
+        # # select partition based on metadata (host, location, time)
+        # # consider filtering by segment in ReadData, to avoid huge joins in MetaDataMerge
+        # S_input_data = ReadData(other_files)
+        # S_metadata_merge = MetaDataMerge(depends_on=[S_meta_cleaning, S_input_data])
+        # S_segm_data = FilterSegm(segm_name, depends_on=S_metadata_merge)
+        # S_segm_cleaning = SegmCleaning(0.02, 7, depends_on=S_segm_data)
+        # S_seq_alignment = SegmAlignment(target_file_path, reference_file_path, nthreads = 'auto', depends_on=S_segm_cleaning)
+        # S_seq_cds_raw = SegmCDS(reference_file_path, annotation_range_1_based, depends_on=S_seq_alignment)
+        # S_seq_cds = FilterValidCDS(depends_on=S_seq_cds_raw)
+            
+    class ReadAlignment(Step):
+        def __init__(self, reference_file_path, alignment_file_path, indels_file_path, annoation_range, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.ref = reference_file_path
+            self.afp = alignment_file_path
+            self.infp = indels_file_path
+            self.ann_range = annoation_range
+
+        def run(self, data: ResultType):
+            md = data.output
+            changes_dict, annotated_seq_dict = extract_annotated_seq_after_augur(md, self.ref, self.afp, self.infp, self.ann_range, verbose=False)
+            md["CDS"] = annotated_seq_dict
+            # consider only CDS divisible by 3
+            md = md[md.CDS.apply(len) % 3 == 0]
+            return {
+                'output': md, 
+                'data_feature_names':  data['data_feature_names'] + ['CDS'],
+                'metadata_feature_names': data['metadata_feature_names']
+            }
+    
+    class ReindexGISAIDFastaAlignment(Step):
+        def __init__(self, alignment_file_path, indels_file_path, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.afp = alignment_file_path
+            self.infp = indels_file_path
+            afp_dir, _, afp_name = self.afp.rpartition(os.path.sep)
+            self.output_afp = afp_dir + os.path.sep + afp_name.replace(".fasta", "_") + "rewritten.fasta"
+            infp_dir, _, infp_name = self.infp.rpartition(os.path.sep)
+            self.output_infp = infp_dir + os.path.sep + infp_name.replace(".fasta.insertions.csv", "_") + "rewritten.fasta.insertions.csv"
+        def run(self):
+            # rewrite the input alignements with the correct index
+            output_fo = []
+            ids = set() # avoid duplicates
+            for si, fo in tqdm(enumerate(miniFasta.read(self.afp))):
+                foheader = fo.getHead()[1:]     # [1:] removes ">"
+
+                # identify sequence
+                try:
+                    _,isolate_id,virus_name,type_subtype,lin,clade,segm = foheader.split("|")
+                except Exception as e:
+                    print(f"Fasta header unpack unusccesful on sequence n. {si} (0-based) of file {self.afp}. Fasta header is: {foheader}.\nSequence ignored.")
+                id = (isolate_id + "_" + virus_name).strip()
+                if not id in ids:
+                    ids.add(id)
+                    sequence = fo.getSeq()
+                    output_fo.append(miniFasta.fasta_object(id,sequence))
+            miniFasta.write(output_fo, self.output_afp)
+            # rewrite the isnertions file with the correct index
+            ids = set() # avoid duplicates
+            with open(self.infp, "r") as inp_ins:
+                header = inp_ins.readline()  # skip header
+                with open(self.output_infp, "w") as out_ins:
+                    out_ins.write(header)
+                    for l in inp_ins.readlines():
+                        # rewrite with correct index
+                        old_id, rest = l.split(",", maxsplit=1)
+                        _,isolate_id,virus_name,type_subtype,lin,clade,segm = old_id.split("|")
+                        new_id = (isolate_id + "_" + virus_name).strip()
+                        if not new_id in ids:
+                            ids.add(new_id)
+                            out_ins.write(f"{new_id},{rest}")
+            return {'aligned_file': self.output_afp, 'insertions_file': self.output_infp}
+
+    class Sequence2Fasta(Step):
+        """
+        Expects a dataset with at least a column 'sequence'.
+        """
+        def __init__(self, output_path, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.output_path = output_path
+        def run(self, input_data: ResultType):
+            data = input_data.output
+            miniFasta.write([miniFasta.fasta_object(idx, row.sequence) for idx,row in data.iterrows()], self.output_path)               
 
     class RSCU(Step):
         def run(self, input_data: ResultType):
@@ -102,6 +406,57 @@ class Input:
                 'data_feature_names': input_data.data_feature_names + GeneticCode.valid_codons,
                 'metadata_feature_names': input_data.metadata_feature_names
             }
+        
+    class ConcatShuffleDatasets(Step):
+        def __init__(self, ignore_index: bool, *args, random_seed=None, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.ignore_index = ignore_index
+            self.random_seed = random_seed
+        def run(self, *data_inputs: list[ResultType]):
+            metadata_feature_names = data_inputs[0].metadata_feature_names
+            data_feature_names = data_inputs[0].data_feature_names
+            output_df_colums = data_inputs[0].output.columns.tolist()
+            for di in data_inputs:
+                assert di.metadata_feature_names == metadata_feature_names, "Datasets have different values of metadata_feature_names"
+                assert di.data_feature_names == data_feature_names, "Datasets have different values of data_feature_names"
+                assert di.output.columns.tolist() == output_df_colums, "Datasets have different columns of different order of the columns"
+            out = pd.concat([d.output for d in data_inputs], ignore_index=self.ignore_index).sample(frac=1, random_state=self.random_seed)
+            return {
+                'output': out,
+                'data_feature_names': data_feature_names,
+                'metadata_feature_names': metadata_feature_names
+            }
+
+    class DropMetadata(Step):
+        def run(self, data_input: ResultType):
+            return {
+                'output': data_input.output[data_input.data_feature_names],
+                'metadata_feature_names': [],
+                'data_feature_names': data_input.data_feature_names # ['segm', 'seq_len', 'n_ratio', 'sequence', 'CDS']
+            }
+
+    class MoveDataFeaturesToMetadata(Step):
+        def run(self, data_input: ResultType):
+            return {
+                'output': data_input.output, 'metadata_feature_names': data_input.metadata_feature_names + data_input.data_feature_names, 'data_feature_names': []
+            }
+        
+    class NPartitions(Step):
+        def __init__(self, n, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.n = n
+        def run(self, input_data: ResultType):
+            data = input_data.output
+            data_feature_names = input_data.data_feature_names
+            metadata_feature_names = input_data.metadata_feature_names
+            available_data_size = input_data.output.shape[0]
+            size_partitions = available_data_size // self.n
+            partitions_start_indices = np.array([i*size_partitions for i in range(self.n)])
+            partitions_end_indices = partitions_start_indices + size_partitions
+            partitions_end_indices[-1] = available_data_size
+            partitions = [data.iloc[s:e] for s,e in zip(partitions_start_indices, partitions_end_indices)]
+            return [CleverDict({'output': v, 'data_feature_names': data_feature_names, 'metadata_feature_names': metadata_feature_names}) for v in partitions]
+         
 
 class AttachWeek(Step):
     def run(self, input_data: ResultType):
@@ -112,6 +467,39 @@ class AttachWeek(Step):
             'metadata_feature_names': input_data.metadata_feature_names + ['Week'],
             'data_feature_names': input_data.data_feature_names
         }
+    
+class AttachCountryOrState(Step):
+    def __init__(self, *args, exact_replacements: dict = {}, substring_replacements: dict = {}, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.exact_replacements = exact_replacements
+        self.substring_replacements = substring_replacements
+    def run(self, input_data: ResultType):
+        output = input_data.output.copy()
+        country_or_state = (
+            output.Location
+            .str.replace("nan", "")
+            .str.replace(" / EPI_ISL_19541397 refers - with a high likelihood - to the same patients from submissions EPI_ISL_19512045, EPI_ISL_19512046, EPI", "")
+            .str.replace("North America / ", "")
+            .str.replace("United States / ", "USA, ")
+            .str.split(" / ").str[0]
+            .replace("North America", np.nan)
+            .str.replace("United States", "USA")
+            .str.replace("Unknown", "")
+            .str.rstrip(" /")
+            .str.replace("Conneticut", "Connecticut")
+            .replace("USA,", "USA")
+            .str.replace("Deleware", "Delaware")
+            .str.replace("Massachussetts", "Massachusetts")
+            .str.replace("USA, Puerto Rico", "Puerto Rico")
+            .str.replace("CaliforniSWL7/2009", "California")
+            .replace("", np.nan)
+        )
+        for k,v in self.exact_replacements:
+            country_or_state = country_or_state.replace(k,v)
+        for k,v in self.substring_replacements:
+            country_or_state = country_or_state.str.replace(k,v)
+        output['country_or_state'] = country_or_state
+        return {'output': output, 'metadata_feature_names': input_data.metadata_feature_names + ['country_or_state'], 'data_feature_names': input_data.data_feature_names}
 
 class WindowSelector(Step):
     def __init__(self,  date_range, start, end, *args, inclusive="both", **kwargs):
@@ -253,6 +641,26 @@ class NumericIndexBasedPartition(Step):
             'metadata_feature_names': partitioner['metadata_feature_names'],
             'range_start': self.range_start,
             'range_end': self.range_end
+        }
+    
+class AbsoluteSortByCollectionDateAndEpisetID(Step):
+    def run(self, input_data: ResultType):
+        data = input_data.output.copy()
+        metadata_feature_names = input_data.metadata_feature_names
+        # sort by Collection Date + Isolate Num (EPI_ISL_#####)
+        if pd.api.types.is_string_dtype(data.Isolate_Id):
+            data['Isolate_Num'] = data['Isolate_Id'].str.lstrip("EPI_ISL_").astype(int)
+            data = data.sort_values(by=['Collection_Date', 'Isolate_Num'])
+            metadata_feature_names += ['Isolate_Num']
+        else:
+            assert pd.api.types.is_numeric_dtype(data.Isolate_Id)
+            data = data.sort_values(by=['Collection_Date', 'Isolate_Id'])
+        data['Sort_Key'] = np.arange(data.shape[0])
+        metadata_feature_names += ['Sort_Key']
+        return {
+            'output': data,
+            'metadata_feature_names': metadata_feature_names,
+            'data_feature_names': input_data.data_feature_names
         }
 
 # input tranformation

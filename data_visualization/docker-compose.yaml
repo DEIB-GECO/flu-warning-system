@@ -6,6 +6,8 @@ services:
     image: datawarehouse_flu
     container_name: datawarehouse_flu
     ports:
-      - 60118:8501
+      - 60119:8501
     environment:
       - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/app/data

@@ -28,18 +28,18 @@ def map_warnings_selector(window_sizes, ks, combinations):
     return w_selection, k_selection
 
 
-def mapbox_input_plus_warnings_in_daterange(input_table, date_range, warning_table = None, sel_host_type = [], sel_country_or_state=[], sel_location=[]):
+def mapbox_input_plus_warnings_in_daterange(input_table, date_range, warning_table = None, sel_host_type = [], sel_country_or_state=[], sel_location=[], sel_genotypes=[]):
     """
     Returns a DataFrame with columns "country_or_state", "lat", "lon", "quantity", "type"
     where "type" can be "all"/"warning"
     """
-    map_input_seq_table = (Table.filter(input_table, sel_host_type, sel_country_or_state, sel_location, date_range)[["country_or_state", "lat", "lon"]]
+    map_input_seq_table = (Table.filter(input_table, sel_host_type, sel_country_or_state, sel_location, date_range, sel_genotypes)[["country_or_state", "lat", "lon"]]
                         .groupby(["country_or_state", "lat", "lon"]).size()
                         .reset_index().rename(columns={0:'quantity'}))
     map_input_seq_table['type'] = 'all'
 
     if warning_table is not None:
-        map_warning_table = (Table.filter(warning_table, sel_host_type, sel_country_or_state, sel_location, date_range)
+        map_warning_table = (Table.filter(warning_table, sel_host_type, sel_country_or_state, sel_location, date_range, sel_genotypes)
                              [["country_or_state", "lat", "lon"]]
                              .groupby(["country_or_state", "lat", "lon"]).size()
                              .reset_index().rename(columns={0:'quantity'}))
@@ -65,7 +65,46 @@ def mapbox_input_plus_warnings_in_daterange(input_table, date_range, warning_tab
                    'activecolor':'rgb(250, 125, 127)'}
                })
     return map_data, fig
-    
+
+def mapbox_input_plus_warnings(filtered_input_table, filtered_warning_table = None):
+    """
+    Returns a DataFrame with columns "country_or_state", "lat", "lon", "quantity", "type"
+    where "type" can be "all"/"warning"
+    """
+    map_input_seq_table = (filtered_input_table[["country_or_state", "lat", "lon"]]
+                        .groupby(["country_or_state", "lat", "lon"], dropna=False).size()
+                        .reset_index().rename(columns={0:'quantity'}))
+    map_input_seq_table['type'] = 'all'
+
+    if filtered_warning_table is not None:
+        map_warning_table = (filtered_warning_table[["country_or_state", "lat", "lon"]]
+                             .groupby(["country_or_state", "lat", "lon"], dropna=False).size()
+                             .reset_index().rename(columns={0:'quantity'}))
+        map_warning_table['type'] = 'warning'
+        map_data = pd.concat([map_input_seq_table, map_warning_table], ignore_index=True).astype({"quantity": int}).sort_values(by="type")
+    else:
+        map_data = map_input_seq_table
+
+    return map_data
+
+def mapbox_fig(map_data):
+    fig = px.scatter_mapbox(map_data, lat='lat', lon='lon', size ='quantity', 
+                            color="type", color_discrete_map={'warning': 'rgba(255, 20, 0, 1)', 'all': 'rgba(0, 0, 0, 1)'}, 
+                            hover_name="country_or_state", hover_data = {'type': True, 'quantity': True, 'lat': False, 'lon': False},
+                            center={'lat':map_data.lat.mean(), 'lon': map_data.lon.mean()}, 
+                            zoom=2.5, mapbox_style='carto-positron', 
+                            height=900, width=1200, template='simple_white')
+    fig.update(layout_coloraxis_showscale=False)
+    fig.update_layout({
+        'plot_bgcolor': 'rgba(0, 0, 0, 0)',
+        'paper_bgcolor': 'rgba(0, 0, 0, 0)',
+        'modebar': {
+                   'orientation': 'h',
+                   'bgcolor': '#ffffff',
+                   'color':'rgb(250, 125, 127)',
+                   'activecolor':'rgb(250, 125, 127)'}
+               })
+    return fig 
     
 def mapbox_input_plus_warnings_in_daterange_by_week(input_table, date_range, warning_table = None, sel_host_type = [], sel_country_or_state=[], sel_location=[], animation_frame=None):
     """
