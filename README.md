@@ -13,17 +13,20 @@ Each stage is distributed as a docker service to be executed independently.
 
 The following sections describe how to use the data available on GISAID with the software to reproduce the analysis described in the associated manuscript.
 
-    > Disclaimers: 
-    > - the data availability may change during time, therefore a few difference with the results described in the manuscript are expected.
-    > - the Data Visualization stage includes pre-defined filters based on the Collection_Date of the input sequences. In order to fully display the output of the Data Processing stage, ensure that the downloaded sequences are collected between July 28, 2008 and January 10, 2010 for H1N1 data, and between January 1, 2019 and May 5, 2025 for H5N1 data. 
-
 # Data download from GISAID
 Download:
 - isolates' metadata in gisaid_epiflu_isolates.xls
 - isolates' HA genomes in gisaid_epiflu_sequence.fasta 
 
-    > The fasta eader must have the format "DNA Accession no. | Isolate ID | Isolate name | Type | Lineage | Clade | Segment"
-    > The date format must be 'YYYY-MM-DD'
+    > Please note that: 
+    > - The fasta header must have the format "DNA Accession no. | Isolate ID | Isolate name | Type | Lineage | Clade | Segment" and any date must be formatted as 'YYYY-MM-DD'.
+    > - the data availability may change during time, therefore some difference with the results described in the manuscript are expected
+    > - the *3. Data Visualization* stage includes a filter on the Collection_Date of the input sequences. In order to fully display your input, ensure the sequences are collected between July 28, 2008 and January 10, 2010 for H1N1 data, and between January 1, 2019 and May 5, 2025 for H5N1 data. 
+
+### Reference sequences for aligning H1N1 and H5N1 genomes
+Reference sequences for H1N1 and H5N1 are already provided in `inputs > references` and correspond to the following isolates/sequences on NCBI Nucleotide DB: 
+- NC_026433.1 Influenza A virus (A/California/07/2009(H1N1)) segment 4 hemagglutinin (HA) gene, complete cds
+- AF144305.1 Influenza A virus (A/Goose/Guangdong/1/96(H5N1)) hemagglutinin (HA) gene, complete cds
 
 # Software requirements
 
@@ -40,10 +43,8 @@ Using a terminal, run in this folder the command `docker-compose build` to prepa
 Preprare the input for the `data_alignment` package by copying the isolates' HA genomes inside the proper directory:
 - for H1N1 data: put the files into `inputs > H1N1`
 - for H5N1 data: put the files into `inputs > H5N1`
+
 The files should be named as gisaid_epiflu_isolates.xls and gisaid_epiflu_sequence.fasta.
-Reference sequences for H1N1 and H5N1 are already provided in `inputs > references` and correspond to the following isolates/sequences on NCBI Nucleotide DB: 
-- NC_026433.1 Influenza A virus (A/California/07/2009(H1N1)) segment 4 hemagglutinin (HA) gene, complete cds
-- AF144305.1 Influenza A virus (A/Goose/Guangdong/1/96(H5N1)) hemagglutinin (HA) gene, complete cds
 
 Open a terminal window, then separately launch the alignment procedure for H1N1 and H5N1 data with the commands:
 

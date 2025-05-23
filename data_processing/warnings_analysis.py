@@ -100,14 +100,22 @@ def assert_dir_exists(dirname, msg):
     if not os.path.exists(dirname) and os.path.isdir(dirname):
         raise FileNotFoundError(msg)
 
+def remove_dir(dirname):
+    try:
+        shutil.rmtree(dirname)
+    except:
+        pass
+
 # args
 serotype = args.serotype
 # output
 os.makedirs("output", exist_ok=True)
 db_url = f'output{os.path.sep}{serotype}.sqlite'
 # cache
-os.makedirs(f".cache", exist_ok=True)
-ct_path = f".cache{os.path.sep}{serotype}_analysis_ctx"
+cache_dir = ".cache"
+os.makedirs(cache_dir, exist_ok=True)
+ct_path = f"{cache_dir}{os.path.sep}{serotype}_analysis_ctx"
+remove_dir(ct_path)
 # cds_range
 if serotype == "H1N1":
     cds_range = [(1,1701)]
@@ -336,7 +344,4 @@ for k,v in S_segm_alignment.materialize().items():
     except:
         pass
 # cache
-try:
-    shutil.rmtree("cache")
-except:
-    pass
+remove_dir(ct_path)

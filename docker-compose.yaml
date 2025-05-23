@@ -21,7 +21,6 @@ services:
       - ./inputs:/app/inputs
       - ./alignments:/app/alignments
       - ./output:/app/output
-      - ./.cache:/app/.cache
 
   data_visualization:
     build:

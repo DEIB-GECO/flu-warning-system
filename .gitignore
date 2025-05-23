@@ -180,23 +180,12 @@ cython_debug/
 .DS_Store
 
 # Project Specific 
-
-# data_alignment package
-data_alignment/alignments/*
-data_alignment/inputs/h1n1/*
-data_alignment/inputs/h5n1/*
-
-# data processing package
-data_processing/alignments/*
-data_processing/input/*
-data_processing/output/*
-data_processing/references/*
-
-# data_visualization package
-data_warehouse/data/*.sqlite
+alignments/*
+inputs/H1N1/*
+inputs/H5N1/*
+output/*
 
 *.sqlite
-*.fasta
 *.xls
 *.isertions.csv
 *.log

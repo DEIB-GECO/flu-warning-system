@@ -1,11 +1,38 @@
+.git
 .gitignore
-.git/
+.gitmodules
+.gitattributes
+
+venv/
+.venv/
+env/
+.env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.ipynb_checkpoints/ 
+
+.vscode/ # VS Code configuration
+.idea/   # IntelliJ/PyCharm configuration
+*.swp    # Vim swap files
+*~       # Emacs backup files
+
+dist/
+build/
+*.egg-info/
+.coverage
+.pytest_cache/ # pytest cache
+htmlcov/       # coverage HTML reports
+
 Dockerfile
-**/*.pyc
-**/*.pyo
-**/*.mo
-**/__pycache__/
-data/
-generated/
-**/*.sqlite
-**/*.parquet
+docker-compose.yml
+docker-compose.*.yml
+.dockerignore
+
+# Project specific
+inputs/
+outputs/
+alignments/
+dataset_ids/
