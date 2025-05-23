@@ -3,7 +3,8 @@ import numpy as np
 import pandas as pd
 import utils.db_queries as dbq
 from utils.db_queries import CachedDB
-from utils.utils import DateRange, table_host_types, table_genotypes, table_countries_and_states, Table
+from os import path
+from utils.utils import DateRange, table_host_types, table_genotypes, table_countries_and_states, Table, read_stray_configurations
 from datetime import datetime
 from utils.aggregated_view import *
 from utils.individual_sequences_view import tabs_individual_sequences
@@ -11,14 +12,12 @@ from utils import filters_view
 from utils.map_view import map_warnings_selector, time_periods, mapbox_input_plus_warnings, mapbox_fig
 
 # Database engine
-db_engine = st.connection(url="sqlite:///output/H5N1.sqlite?mode=ro", type="sql", name="h1n1")  
+db_engine = st.connection(url=f"sqlite:///output{path.sep}H5N1.sqlite?mode=ro", type="sql", name="h5n1")  
 
 # Page structure
-# window_sizes = (5, 10, 50, 100)
-# ks = (1, 3, 5, 10, 15)
-window_sizes = (50,)
-ks = (10,)
-combinations = [(w, k) for w in window_sizes for k in ks if k < w]
+combinations = read_stray_configurations(f"inputs{path.sep}stray_configurations.csv")
+window_sizes = tuple(sorted(set([pair[0] for pair in combinations])))
+ks = tuple(sorted(set([pair[1] for pair in combinations])))
 tab_titles = ["Input sequences"] + [f"Window {w} k {k}" for w, k in combinations]
 tab2table_name_dict = dict(
     zip(tab_titles, ["input_data"] + [f"window{w}_k{k}" for w, k in combinations])

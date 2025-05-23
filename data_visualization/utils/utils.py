@@ -254,3 +254,15 @@ class Table:
         if sel_genotypes: 
             mask = mask & (table['Genotype'].isin(sel_genotypes))
         return table[mask]
+
+
+def read_stray_configurations(file_path):
+    try:
+        with open(file_path) as f:
+            configs = [line.replace(',', ' ').split() for line in f if not line.startswith("#")]
+            configs = [tuple(map(int,pair)) for pair in configs]
+            assert all([len(pairs) == 2 for pairs in configs])
+            assert len(configs) > 0
+    except:
+        raise ValueError(f"Malformed file {file_path}. Make sure the file contains at least one configuration and that each line is formatted as 'number,number'. Lines starting with # are ignored.")
+    return configs

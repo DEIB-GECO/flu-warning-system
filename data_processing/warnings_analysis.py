@@ -106,6 +106,17 @@ def remove_dir(dirname):
     except:
         pass
 
+def read_stray_configurations(file_path):
+    try:
+        with open(file_path) as f:
+            configs = [line.replace(',', ' ').split() for line in f if not line.startswith("#")]
+            configs = [tuple(map(int,pair)) for pair in configs]
+            assert all([len(pairs) == 2 for pairs in configs])
+            assert len(configs) > 0
+    except:
+        raise ValueError(f"Malformed file {file_path}. Make sure the file contains at least one configuration and that each line is formatted as 'number,number'. Lines starting with # are ignored.")
+    return configs
+
 # args
 serotype = args.serotype
 # output
@@ -127,8 +138,9 @@ print("CDS range", cds_range)
 # prot_name
 prot_name = 'HA'
 # stray configurations
-stray_configurations = [(50,10)]
-# stray_configurations = [(5,1), (5,3), (10,1), (10,3), (10,5), (50,1), (50,3), (50,5), (50,10), (50,15), (100,1), (100,3), (100,5), (100,10), (100,15)]
+stray_configurations_file_path = f"inputs{os.path.sep}stray_configurations.csv"
+stray_configurations = read_stray_configurations(stray_configurations_file_path)
+print("Stray configurations:", *stray_configurations)
 # gisaid inputs
 inputs_dir = f"inputs{os.path.sep}{serotype}"
 assert_dir_exists(inputs_dir, f"This script should run in the same directory containing the {inputs_dir} directory")
@@ -268,7 +280,6 @@ def loop(stray_configurations, input_data: ResultType):
         return get_anomlies(n,k,input_data)    
 
 print(f"Using data from Context {ct_path}")
-print(f"Computing outliers for stray configurations: {stray_configurations}")
 for input_name in inputs:
     input_data_features = cds_features(ct_path, input_name)    
     print(f"Running anomaly detection on input: {input_name}")
