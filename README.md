@@ -48,9 +48,9 @@ The files should be named as gisaid_epiflu_isolates.xls and gisaid_epiflu_sequen
 
 Open a terminal window, then separately launch the alignment procedure for H1N1 and H5N1 data with the commands:
 
-- `docker-compose run --remove-orphans data_alignment H1N1`
+- `docker-compose down --remove-orphans && docker-compose run data_alignment H1N1`
 or
-- `docker-compose run --remove-orphans data_alignment H5N1`
+- `docker-compose down --remove-orphans && docker-compose run data_alignment H5N1`
 
 This stage terminates with the generation of two pairs (one for serotype) of .fasta and .insertions.csv files in the `alignments` directory.
 
@@ -59,9 +59,9 @@ This stage terminates with the generation of two pairs (one for serotype) of .fa
 The following instruction describes how to process the data concerining one serotype (H1N1 or H5N1). 
 
 Open a terminal window, then separately launch the data processing stage for H1N1 and H5N1 data with the commands:
-- `docker-compose run --remove-orphans data_processing H1N1`
+- `docker-compose down --remove-orphans && docker-compose run data_processing H1N1`
 or 
-- `docker-compose run --remove-orphans data_processing H5N1`
+- `docker-compose down --remove-orphans && docker-compose run data_processing H5N1`
 
 This stage terminates with the generation of the files H1N1.sqlite and H5N1.sqlite in the `output` directory.
 
