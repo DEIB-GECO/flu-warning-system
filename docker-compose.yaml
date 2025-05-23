@@ -1,0 +1,39 @@
+services:
+  data_alignment:
+    build:
+      context: ./data_alignment
+      dockerfile: Dockerfile
+    image: data_alignment_flu
+    container_name: data_alignment_flu
+    volumes:
+      - ./inputs:/app/inputs
+      - ./alignments:/app/alignments
+
+  data_processing:
+    build:
+      context: ./data_processing
+      dockerfile: Dockerfile
+    image: data_processing_flu
+    container_name: data_processing_flu
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./inputs:/app/inputs
+      - ./alignments:/app/alignments
+      - ./output:/app/output
+      - ./.cache:/app/.cache
+
+  data_visualization:
+    build:
+      context: ./data_visualization
+      dockerfile: Dockerfile
+    image: data_visualization_flu
+    container_name: data_visualization_flu
+    ports:
+      - 60119:8501
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./output:/app/output
+      - ./inputs:/app/inputs
+

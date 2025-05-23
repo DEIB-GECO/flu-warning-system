@@ -26,7 +26,7 @@ from utils.pipeline_lib import *
 arg_parser = argparse.ArgumentParser(description="A script that computes warnings for the Flu Warning System (manuscript, data analyses and web application authored by Alfonsi T.; Bernasconi A.; Chiara M.; Ceri S.)")
 
 # Positional argument (required)
-arg_parser.add_argument("cds_range", type=int, nargs=2, help="The 1-based coordinate range of the CDS of the HA protein (example: 22,1728)")
+arg_parser.add_argument("serotype", type=str, choices=["H1N1", "H5N1"], help="The type of influenza virus. Must be either 'H1N1' or 'H5N1'.")
 
 # Optional flag (boolean)
 # arg_parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output.")
@@ -100,28 +100,44 @@ def assert_dir_exists(dirname, msg):
     if not os.path.exists(dirname) and os.path.isdir(dirname):
         raise FileNotFoundError(msg)
 
-# fixed
+# args
+serotype = args.serotype
+# output
 os.makedirs("output", exist_ok=True)
-os.makedirs(f"cache", exist_ok=True)
-db_url = f'output{os.path.sep}datawarehouse.sqlite'
-ct_path = f"cache{os.path.sep}analysis_ctx"
-cds_range = [tuple(args.cds_range)]
+db_url = f'output{os.path.sep}{serotype}.sqlite'
+# cache
+os.makedirs(f".cache", exist_ok=True)
+ct_path = f".cache{os.path.sep}{serotype}_analysis_ctx"
+# cds_range
+if serotype == "H1N1":
+    cds_range = [(1,1701)]
+elif serotype == "H5N1":
+    cds_range = [(22,1728)]
+else:
+    raise ValueError(f"Unkonw serotype {serotype}")
 print("CDS range", cds_range)
+# prot_name
 prot_name = 'HA'
+# stray configurations
 stray_configurations = [(50,10)]
 # stray_configurations = [(5,1), (5,3), (10,1), (10,3), (10,5), (50,1), (50,3), (50,5), (50,10), (50,15), (100,1), (100,3), (100,5), (100,10), (100,15)]
 # gisaid inputs
-inputs_dir = "input"
+inputs_dir = f"inputs{os.path.sep}{serotype}"
 assert_dir_exists(inputs_dir, f"This script should run in the same directory containing the {inputs_dir} directory")
 data_file_path, metadata_file_path = get_gisaid_inputs(inputs_dir)
 # refseq
-references_dir = "references"
-assert_dir_exists(references_dir, f"This script should run in the same directory containing the {references_dir} directory")
-refseq_path = f"{references_dir}{os.path.sep}refseq.fasta"
-# depending on alignment dir
+refseq_path = f"inputs{os.path.sep}references{os.path.sep}{serotype}_ha.fasta"
+if not os.path.exists(refseq_path):
+    raise FileNotFoundError(f"Reference sequence file not found at the expected location ({refseq_path})")
+# alignments
 alignments_dir = "alignments"
 assert_dir_exists(alignments_dir, f"This script should run in the same directory containing the {alignments_dir} directory")
-alignment_file_path, indels_file_path = get_alignment_files(alignments_dir)
+alignment_file_path = f"alignments/aligned_{serotype}_ha.fasta"
+indels_file_path = f"alignments/aligned_{serotype}_ha.fasta.insertions.csv"
+if not os.path.exists(alignment_file_path):
+    raise FileNotFoundError(f"Alignment file (1-of-2) not found at the expected location ({alignment_file_path})")
+if not os.path.exists(indels_file_path):
+    raise FileNotFoundError(f"Alignment file (2-of-2) not found at the expected location ({indels_file_path})")
 
 # %% [markdown]
 # # Data Preparation
@@ -135,7 +151,7 @@ class CustomMetaFilters(Step):
     def run(self, data_input):
         data = data_input.output
         return {
-            'output': data[(data.Location.str.startswith("North America")) & (data.Host_Type.isin(['non-human mammal', 'human']))],
+            'output': data[(data.Location.str.startswith("North America"))],
             'metadata_feature_names': data_input.metadata_feature_names,
             'data_feature_names': data_input.data_feature_names,
         }

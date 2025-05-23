@@ -2,13 +2,11 @@
 
 # source augur
 
-refseq_path=inputs/references/h5n1_ha.fasta
-target_file=inputs/h5n1/gisaid_epiflu_sequence.fasta
-aligned_file=alignments/aligned_h5n1_ha.fasta
+refseq_path=/app/inputs/references/H5N1_ha.fasta
+target_file=/app/inputs/H5N1/gisaid_epiflu_sequence.fasta
+aligned_file=/app/alignments/aligned_H5N1_ha.fasta
 
 nthreads=3
-
-mkdir alignments
 
 augur align --reference-sequence $refseq_path --sequences $target_file --output $aligned_file --nthreads $nthreads --remove-reference
 

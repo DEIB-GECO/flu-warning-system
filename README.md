@@ -9,7 +9,7 @@ The software is organized in three stages, where each stage depends on the outpu
 2. Data Processing
 3. Data Visualization
 
-Each stage is distributed as a separate docker container, which can be built and run with simple commands.
+Each stage is distributed as a docker service to be executed independently.
 
 The following sections describe how to use the data available on GISAID with the software to reproduce the analysis described in the associated manuscript.
 
@@ -31,52 +31,43 @@ Download, install and run Docker Desktop on your computer.
 
 # Software setup
 
-Using a terminal, enter each of the software directories and run the command `docker-compose build` to prepare the software stages.
+Using a terminal, run in this folder the command `docker-compose build` to prepare the software stages.
 
 # Software Usage
 
 ### 1. Sequence Alignment
 
 Preprare the input for the `data_alignment` package by copying the isolates' HA genomes inside the proper directory:
-- for H1N1 data: put the files into `data_alignment > inputs > h1n1`
-- for H5N1 data: put the files into `data_alignment > inputs > h5n1`
-Reference sequences for H1N1 and H5N1 are already provided in `data_alignment > inputs > references` and correspond to the following isolates/sequences on NCBI Nucleotide DB: 
+- for H1N1 data: put the files into `inputs > H1N1`
+- for H5N1 data: put the files into `inputs > H5N1`
+The files should be named as gisaid_epiflu_isolates.xls and gisaid_epiflu_sequence.fasta.
+Reference sequences for H1N1 and H5N1 are already provided in `inputs > references` and correspond to the following isolates/sequences on NCBI Nucleotide DB: 
 - NC_026433.1 Influenza A virus (A/California/07/2009(H1N1)) segment 4 hemagglutinin (HA) gene, complete cds
 - AF144305.1 Influenza A virus (A/Goose/Guangdong/1/96(H5N1)) hemagglutinin (HA) gene, complete cds
 
-Open a terminal window, move inside the `data_alignment` folder, then separately launch the alignment procedure for H1N1 and H5N1 data with the commands:
+Open a terminal window, then separately launch the alignment procedure for H1N1 and H5N1 data with the commands:
 
-- `docker-compose run data_alignment h1n1.sh` for aligning H1N1 files
-- `docker-compose run data_alignment h5n1.sh` for aligning H5N1 files
+- `docker-compose run --remove-orphans data_alignment H1N1`
+or
+- `docker-compose run --remove-orphans data_alignment H5N1`
 
-At each command execution, the package will generate a pair of .fasta and .insertions.csv files in the `data_alignment > alignments` directory. 
+This stage terminates with the generation of two pairs (one for serotype) of .fasta and .insertions.csv files in the `alignments` directory.
 
 ### 2. Data Processing
 
 The following instruction describes how to process the data concerining one serotype (H1N1 or H5N1). 
 
-Prepare the input for the `data_processing` package by:
-- copying the isolates' metadata and HA genomes in the directory `data_processing > input`. The software expects ONE .fasta file for the genomes and ONE .xls file for the metadata.
-- copying the otuput of procedure *1. Sequence Alignment* in the directory `data_processing > alignments`. The software expects ONE .fasta file and ONE .insertions.csv file. 
-- copy the relevant reference sequence from `data_alignment > inputs > references` into `data_processing > references > refseq.fasta`. The software expects ONE refseq.fasta file.
-
-Open a terminal window, move inside the `data_processing` folder, then launch the software package with the command:
-- `docker-compose run data_processing 1 1701` for H1N1
+Open a terminal window, then separately launch the data processing stage for H1N1 and H5N1 data with the commands:
+- `docker-compose run --remove-orphans data_processing H1N1`
 or 
-- `docker-compose run data_processing 22 1728` for H5N1
+- `docker-compose run --remove-orphans data_processing H5N1`
 
-    > The arguments (1 1701) or (22 1728) tell the software the HA coordinates range in the aligned sequences. 
-
-At each command execution, the package will generate a `datawarehouse.sqlite` file. To avoid overwriting it on the next run, please rename this file as `h1n1.sqlite` or `h5n1.sqlite` according to the input. 
+This stage terminates with the generation of the files H1N1.sqlite and H5N1.sqlite in the `output` directory.
 
 ### 3. Data Visualization
 
-Please copy the output of *2. Data Processing* (two .sqlite files contained in the `data_processing > output` directory) to the directory `data_visualization > data`. Ensure the files are named as:
-- `h1n1.sqlite` for the output of *2. Warnings analysis* about H1N1
-- `h5n1.sqlite` for the output of *2. Warnings analysis* about H5N1
-
-Open a terminal window, move inside the `data_visualization` folder, then:
-- launch the visualization server with the command `docker-compose up`
+Open a terminal window and:
+- launch the visualization server with the command `docker-compose up --remove-orphans data_visualization`
 - open a browser window at the url (http://localhost:60119/)[http://localhost:60119/]
 
 When necessary, shutdown the visualization server by pressing [Ctrl+C] on Windows / Linux and [Cmd+C] on MacOS. 

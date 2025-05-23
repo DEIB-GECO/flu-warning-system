@@ -11,7 +11,7 @@ from utils import filters_view
 from utils.map_view import map_warnings_selector, time_periods, mapbox_input_plus_warnings, mapbox_fig
 
 # Database engine
-db_engine = st.connection(url="sqlite:///data/h1n1.sqlite?mode=ro", type="sql", name="h1n1")  
+db_engine = st.connection(url="sqlite:///output/H1N1.sqlite?mode=ro", type="sql", name="h1n1")  
 
 # Page structure
 # window_sizes = (5, 10, 50, 100)
@@ -88,7 +88,7 @@ tabs_individual_sequences(tab_titles, tab2table_name_dict, db_engine, table_show
 ##### MAP
 @st.cache_resource
 def coordinates_table():
-    return pd.read_csv("data/coordinates.csv").replace("", np.nan).replace(" ", np.nan).astype({"lat": pd.Float64Dtype(), "lon": pd.Float64Dtype()})
+    return pd.read_csv("inputs/coordinates.csv").replace("", np.nan).replace(" ", np.nan).astype({"lat": pd.Float64Dtype(), "lon": pd.Float64Dtype()})
 
 st.markdown("### Map of warnings")
 sel_map_warning_config = map_warnings_selector(window_sizes, ks, combinations)
