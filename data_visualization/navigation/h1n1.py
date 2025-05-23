@@ -130,7 +130,7 @@ else:
 map_data = mapbox_input_plus_warnings(map_filtered_input_sequences_table, map_filtered_warning_table)
 
 # before plotting, remove rows where country_or_state is "USA" 
-figure_map_data = map_data[(~map_data.country_or_state.isna()) & (map_data.country_or_state != "USA")]
+figure_map_data = map_data[(~map_data.country_or_state.isna()) & (map_data.country_or_state != "USA") & (~map_data.lat.isna()) & (~map_data.lon.isna())]
 
 ## Currently displaying:
 if figure_map_data.empty:
@@ -150,7 +150,7 @@ else:
             st.markdown(f"{number_all_sequences} sequences")
 
     # append info for isolates in generic "USA"
-    not_displayed = (map_data[(map_data.country_or_state.isna()) | (map_data.country_or_state == "USA")])
+    not_displayed = (map_data[(map_data.country_or_state.isna()) | (map_data.country_or_state == "USA") | (map_data.lat.isna()) | (map_data.lon.isna())])
     if not not_displayed.empty:
         number_all_sequences = not_displayed[not_displayed.type=="all"].quantity.sum()
         number_warnings = not_displayed[not_displayed.type=="warning"].quantity.sum()
