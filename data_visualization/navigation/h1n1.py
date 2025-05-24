@@ -90,7 +90,7 @@ def coordinates_table():
     return pd.read_csv("inputs/coordinates.csv").replace("", np.nan).replace(" ", np.nan).astype({"lat": pd.Float64Dtype(), "lon": pd.Float64Dtype()})
 
 st.markdown("### Map of warnings")
-sel_map_warning_config = map_warnings_selector(window_sizes, ks, combinations)
+sel_map_warning_config = map_warnings_selector(window_sizes, ks, combinations, default_w=50, default_k=10)
 display_warnings = all(sel_map_warning_config)
 
 if display_warnings:
@@ -104,9 +104,9 @@ min_period_label = min(period_labels)
 period_label2range = dict(zip(period_labels, test_ranges))
 col0, col1 = st.columns([1,2])
 with col0:
-    st.markdown("**Time Period**")
+    st.markdown("**Select a specific bi-week**")
 with col1:
-    default_value = st.session_state.get("map_view_time_period_slider", period_labels[0])
+    default_value = st.session_state.get("map_view_time_period_slider", "2009-17  2009-18")
     if default_value > max_period_label:
         default_value = max_period_label
     elif default_value < min_period_label:
@@ -145,9 +145,9 @@ else:
     with col1:
         st.markdown(f"{number_unique_locations} unique locations")   
         if display_warnings: 
-            st.markdown(f"{number_warnings} warnings in {number_all_sequences} sequences")
+            st.markdown(f"{number_warnings} warnings in {number_all_sequences} sequences in the bi-week {st.session_state['map_view_time_period_slider']}")
         else:
-            st.markdown(f"{number_all_sequences} sequences")
+            st.markdown(f"{number_all_sequences} sequences in the bi-week {st.session_state['map_view_time_period_slider']}")
 
     # append info for isolates in generic "USA"
     not_displayed = (map_data[(map_data.country_or_state.isna()) | (map_data.country_or_state == "USA") | (map_data.lat.isna()) | (map_data.lon.isna())])
@@ -172,7 +172,7 @@ else:
                 .stPlotlyChart { margin-top: -60px;    }
                 </style>
                 """, unsafe_allow_html=True)
-    st.markdown(f"**Number of sequences/anomalies by location in the period {st.session_state['map_view_time_period_slider']}**")
+    st.markdown(f"**Number of sequences/anomalies by location in the bi-week {st.session_state['map_view_time_period_slider']}**")
     resume = map_data.rename(columns={'country_or_state':'locations'}).pivot(index='locations', columns='type', values='quantity').fillna(0).rename(columns={'all':'sequences', 'warning': 'warnings'})
     if 'warnings' not in resume.columns:
         resume['warnings'] = 0

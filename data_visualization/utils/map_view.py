@@ -4,7 +4,7 @@ import plotly.express as px
 import pandas as pd
 from datetime import timedelta
 
-def map_warnings_selector(window_sizes, ks, combinations):
+def map_warnings_selector(window_sizes, ks, combinations, default_w=None, default_k=None):
     col0, col1, col2 = st.columns([1, 1,1])
     with col0:
         st.markdown("**Configuration of the displayed warnings**")
@@ -15,9 +15,9 @@ def map_warnings_selector(window_sizes, ks, combinations):
             window_sizes, 
             selection_mode="single", 
             key="w_selection",
-            default=st.session_state.get("w_selection", None))
+            default=st.session_state.get("w_selection", default_w))
     with col2:
-        previous_value = st.session_state.get("k_selection", None)
+        previous_value = st.session_state.get("k_selection", default_k)
         previous_value = previous_value if previous_value in [k for w,k in combinations if w == w_selection] else None    # if the previous_value is not valid, set it to None
         k_selection = st.pills(
             "K", 
