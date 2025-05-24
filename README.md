@@ -108,6 +108,20 @@ Open a terminal window and:
 
 When necessary, shutdown the visualization server by pressing [Ctrl+C] on Windows / Linux and [Cmd+C] on MacOS. 
 
+# Example Visualization Use Cases
+
+Below, an example of the visualization of the H1N1 dataset, with filters on Host Type and Location (North America); the aggregated warning counts in multiple N,k configurations; a table for inspecting metadata of 1)  all individual sequences in the dataset and 2) warning sequences in the different configurations; an interactive map to visualize geo-located warnings (choosing N,k and a specific bi-week as parameters) — here we selected N = 50, k = 10 in the 17/18th week of 2009, showing several warnings widespread in many US states.
+
+<center>
+<img src="https://github.com/tomalf2/flu-warning-system/blob/main/docs_resources/h1n1.png?raw=true" alt="Example of the visualization of the H1N1 dataset" width="900"/>
+</center>
+
+Below, an example of the visualization of the H5N1 dataset, with filters on Host Type, Genotype, Location (North America), and time span of Collection Dates; the aggregated warning counts in multiple N,k configurations. As for H1N1, we also show a table for inspecting metadata of 1)  all individual sequences in the dataset and 2) warning sequences in the different configurations; then, an interactive map to visualize geo-located warnings (choosing N,k and a specific bi-week as parameters) — here we selected N = 50, k = 1 in the 35/36th week of 2024, showing the first warnings in California.
+
+<center>
+<img src="https://github.com/tomalf2/flu-warning-system/blob/main/docs_resources/h5n1.png?raw=true" alt="Example of the visualization of the H5N1 dataset" width="900"/>
+</center>
+
 # License
 
 See the LICENSE file. 
