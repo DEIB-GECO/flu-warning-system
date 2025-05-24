@@ -259,6 +259,8 @@ def get_anomlies(n, k, input_data: ResultType):
 
     # windows
     windows = [(i,i+n) for i in range(0, data.shape[0]-n+1)]    # left included, right excluded
+    if len(windows) == 0:
+        print(f"WARN Dataset of size {data.shape[0]} is too small to compute a window of size {n}!")
 
     # output 
     outliers_idx = []
