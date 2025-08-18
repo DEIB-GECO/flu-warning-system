@@ -54,7 +54,7 @@ sel_country_or_state = st.multiselect(
         placeholder="Select one or more values to enable the filter",
     )
 
-intial_range = datetime(2019, 1, 7), datetime(2025, 5, 5, 23, 59, 59, 999999) 
+intial_range = datetime(2019, 1, 7), datetime(2025, 7, 25, 23, 59, 59, 999999) 
 date_range = filters_view.collection_date_slider(intial_range, default_range=[datetime(2024, 2, 26),intial_range[1]])
 
 filtered_input_sequences_table = Table.filter(input_sequences_table, sel_host_type, sel_country_or_state, date_range=date_range, sel_genotypes=sel_genotypes)
