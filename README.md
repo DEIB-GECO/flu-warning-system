@@ -1,6 +1,6 @@
 # Supporting Data and Code for Flu Warning System
 
-This repository contains the software and data associated with the manuscript "Light-weight multi-scale early warning system for influenza A spillovers" by Alfonsi T., Bernasconi A., Chiara M., and Ceri S.
+This repository contains the software and data associated with the manuscript "Lightweight multi-scale early warning system for influenza A spillovers" by Alfonsi T., Bernasconi A., Chiara M., and Ceri S.
 
 The software takes as input files the metadata and HA genomes of Influenza viruses formatted as .xls files for metadata and .fasta files for the genomes. 
 
